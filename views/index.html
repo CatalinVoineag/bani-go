@@ -8,8 +8,17 @@
     <script src="https://unpkg.com/htmx.org@2.0.2" integrity="sha384-Y7hw+L/jvKeWIRRkqWYfPcvVxHzVzn5REgzbawhxAuQGwX1XWe70vji+VSeHOThJ" crossorigin="anonymous"></script>
   </head>
   <body>
-    Hello
+    <div>
+      {{ range .Data.Positions }}
+        {{ template "position" . }}
+      {{ end }}
+    </div>
   </body>
 </html>
 {{ end }}
 
+{{ block "position" . }}
+  <div>
+    <h1>{{ .Ticker }}</h1>
+  </div>
+{{ end }}
