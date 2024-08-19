@@ -1,18 +1,24 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
-	"fmt"
 	"html/template"
 	"io"
+	"log"
 	"net/http"
 	"os"
+	"time"
 
-	//"github.com/CatalinVoineag/bani/internal/db"
-  "github.com/joho/godotenv"
-	"github.com/gocolly/colly/v2"
+	"github.com/CatalinVoineag/bani/internal/database"
+	"github.com/CatalinVoineag/bani/internal/jobs"
+
+	//	"github.com/gocolly/colly/v2"
+	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	_ "github.com/lib/pq"
 )
 
 type Templates struct {
@@ -55,13 +61,12 @@ func newPosition(ticker string, quantity float64, averagePrice float64, currentP
 type Positions = []TradingPosition
 
 type Data struct {
-  Positions Positions
+  Positions []database.Position
 }
 
-func newData() Data {
-  return Data {
-    Positions: getPositions(),
-  }
+
+type apiConfig struct {
+  DB *database.Queries
 }
 
 func getPositions() Positions {
@@ -110,37 +115,49 @@ func main() {
   e := echo.New()
   e.Use(middleware.Logger())
 
-  page := newPage()
   e.Renderer = newTemplate()
- // data := db.Setup()
+  
+  dbURL := os.Getenv("DB_URL")
+  if dbURL == "" {
+    log.Fatal("DB_URL not found")
+  }
 
- // defer data.Close()
+  conn, err := sql.Open("postgres", dbURL)
+  if err != nil {
+    log.Fatal("Can't connect to DB")
+  }
 
- // position1 := &Position{
- //   Quantity: 100.0,
- //   AveragePrice: 100.0,
- //   CurrentPrice: 100.0,
- //   Ppl: 100.0,
- // }
-
- // _, err := data.Model(position1).Insert()
- // if err != nil {
- //   panic(err)
- // }
+  db := database.New(conn)
+  //apiCfg := apiConfig {
+  //  DB: database.New(conn),
+  //}
+  
+  go jobs.Start(db, time.Minute)
 
   e.GET("/", func(c echo.Context) error {
-    collector := colly.NewCollector()
+ //   collector := colly.NewCollector()
 
     // Find and visit all links
-    collector.OnHTML("#quote-summary", func(e *colly.HTMLElement) {
+  //  collector.OnHTML("#quote-summary", func(e *colly.HTMLElement) {
 
-      openPrice := e.ChildText("[data-test='OPEN-value']")
+  //    openPrice := e.ChildText("[data-test='OPEN-value']")
 
-      fmt.Println("PRICE")
-      fmt.Println(openPrice)
-    })
+  //    fmt.Println("PRICE")
+  //    fmt.Println(openPrice)
+  //  })
 
-    collector.Visit("https://uk.finance.yahoo.com/quote/IGG.L/")
+  //  collector.Visit("https://uk.finance.yahoo.com/quote/IGG.L/")
+  positions, err := db.GetTodayPositions(context.Background())
+
+  if err != nil {
+    e.Logger.Fatal("No positions")
+  }
+
+  page := Page {
+    Data: Data { 
+      Positions: positions,
+    },
+  }
 
     return c.Render(200, "index", page)
   })
