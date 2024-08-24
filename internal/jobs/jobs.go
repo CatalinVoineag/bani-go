@@ -51,41 +51,46 @@ func currentPositionsWorker(db *database.Queries, wg *sync.WaitGroup) {
   positions := getTradingTwoOneTwoPositions()
   if len(positions) > 0 {
     for _, position := range positions {
-      
-      record, err := db.CreatePosition(context.Background(), database.CreatePositionParams {
-        ID: uuid.New(),
-        CreatedAt: time.Now(),
-        UpdatedAt: time.Now(),
-        Quantity: position.Quantity,
-        AveragePrice: position.AveragePrice,
-        CurrentPrice: position.CurrentPrice,
-        Ppl: position.Ppl,
-        Ticker: position.Ticker,
-      })
-
-      if err != nil {
-        log.Println("Position cannot be created ", err)
-      }
-      
-      log.Println("Position Created ticker: ", record.Ticker)
-      lastPositions, err := db.GetLastPositionsTodayByTickerExcludingCurrent(
+      lastPosition, err := db.GetLastPositionTodayByTicker(
         context.Background(),
-        database.GetLastPositionsTodayByTickerExcludingCurrentParams{
-          Ticker: record.Ticker,
-          ID: record.ID,
-        },
+        position.Ticker,
       )
 
       if err != nil {
-        log.Println("No last position")
-      } else {
-        for _, position := range lastPositions {
-          _, err = db.DeletePoistion(context.Background(), position.ID)
-          if err != nil {
-            log.Printf("Could not delete position %s error: %e", position.ID, err)
-          }
+        record, err := db.CreatePosition(context.Background(), database.CreatePositionParams {
+          ID: uuid.New(),
+          CreatedAt: time.Now(),
+          UpdatedAt: time.Now(),
+          Quantity: position.Quantity,
+          AveragePrice: position.AveragePrice,
+          CurrentPrice: position.CurrentPrice,
+          Ppl: position.Ppl,
+          Ticker: position.Ticker,
+        })
+
+        if err != nil {
+          log.Printf("Position cannot be created for %s error: %e", position.Ticker, err)
+        } else {
+          log.Println("Position created for: ", record.Ticker)
         }
-        log.Println("Last positions deleted")
+      } else {
+        record, err := db.UpdatePosition(
+          context.Background(),
+          database.UpdatePositionParams{
+            Quantity: position.Quantity ,  
+            AveragePrice: position.AveragePrice,
+            CurrentPrice: position.CurrentPrice,
+            Ppl: position.Ppl,
+            Ticker: position.Ticker,
+            ID: lastPosition.ID,
+          },
+        )
+
+        if err != nil {
+          log.Printf("Position cannot be updated for %s error: %e ", record.Ticker, err)
+        } else {
+          log.Println("Position be updated for %r", record.Ticker)
+        } 
       }
     }
   } else {

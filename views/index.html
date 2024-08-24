@@ -19,6 +19,6 @@
 
 {{ block "position" . }}
   <div>
-    <h1>{{ .Ticker }} -- Price: {{ .CurrentPrice }}</h1>
+    <h1>{{ .Ticker }} -- Price: {{ .CurrentPrice }} -- Previous Close Price {{ .PreviousClosePrice.Value }}</h1>
   </div>
 {{ end }}

@@ -13,8 +13,6 @@ import (
 
 	"github.com/CatalinVoineag/bani/internal/database"
 	"github.com/CatalinVoineag/bani/internal/jobs"
-
-	//	"github.com/gocolly/colly/v2"
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -48,13 +46,14 @@ type TradingPosition struct {
   Ppl float32 `json:"ppl"`
 }
 
-func newPosition(ticker string, quantity float64, averagePrice float64, currentPrice float64, ppl float32) TradingPosition {
-  return TradingPosition {
+func newPosition(ticker string, quantity float64, averagePrice float64, currentPrice float64, ppl float32, previousClosePrice float64) Position {
+  return Position {
     Ticker: ticker,
     Quantity: quantity,
     AveragePrice: averagePrice,
     CurrentPrice: currentPrice,
     Ppl: ppl,
+    PreviousClosePrice: previousClosePrice,
   }
 }
 
@@ -63,7 +62,6 @@ type Positions = []TradingPosition
 type Data struct {
   Positions []database.Position
 }
-
 
 type apiConfig struct {
   DB *database.Queries
@@ -96,18 +94,14 @@ type Page struct {
   Data Data
 }
 
-func newPage() Page {
-  return Page {
-    Data: newData(),
-  }
-}
-
 type Position struct {
   Id int64
+  Ticker string
   Quantity float64
   AveragePrice float64
   CurrentPrice float64
   Ppl float32
+  PreviousClosePrice float64
 }
 
 func main() {
@@ -128,36 +122,22 @@ func main() {
   }
 
   db := database.New(conn)
-  //apiCfg := apiConfig {
-  //  DB: database.New(conn),
-  //}
-  
-  go jobs.Start(db, time.Minute)
+
+  go jobs.Start(db, (15 * time.Minute))
+  go jobs.ScrapePreviousClosePrice(db)
 
   e.GET("/", func(c echo.Context) error {
- //   collector := colly.NewCollector()
+    positions, err := db.GetTodayPositions(context.Background())
 
-    // Find and visit all links
-  //  collector.OnHTML("#quote-summary", func(e *colly.HTMLElement) {
+    if err != nil {
+      e.Logger.Fatal("No positions")
+    }
 
-  //    openPrice := e.ChildText("[data-test='OPEN-value']")
-
-  //    fmt.Println("PRICE")
-  //    fmt.Println(openPrice)
-  //  })
-
-  //  collector.Visit("https://uk.finance.yahoo.com/quote/IGG.L/")
-  positions, err := db.GetTodayPositions(context.Background())
-
-  if err != nil {
-    e.Logger.Fatal("No positions")
-  }
-
-  page := Page {
-    Data: Data { 
-      Positions: positions,
-    },
-  }
+    page := Page {
+      Data: Data { 
+        Positions: positions,
+      },
+    }
 
     return c.Render(200, "index", page)
   })

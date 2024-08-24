@@ -5,18 +5,20 @@
 package database
 
 import (
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
 )
 
 type Position struct {
-	ID           uuid.UUID
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	Quantity     float64
-	AveragePrice float64
-	CurrentPrice float64
-	Ppl          float64
-	Ticker       string
+	ID                 uuid.UUID
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	Quantity           float64
+	AveragePrice       float64
+	CurrentPrice       float64
+	Ppl                float64
+	Ticker             string
+	PreviousClosePrice sql.NullFloat64
 }

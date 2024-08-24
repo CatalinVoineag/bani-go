@@ -7,6 +7,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,7 +16,7 @@ import (
 const createPosition = `-- name: CreatePosition :one
 insert into positions (id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker)
 values ($1, $2, $3, $4, $5, $6, $7, $8)
-returning id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker
+returning id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, previous_close_price
 `
 
 type CreatePositionParams struct {
@@ -50,13 +51,14 @@ func (q *Queries) CreatePosition(ctx context.Context, arg CreatePositionParams) 
 		&i.CurrentPrice,
 		&i.Ppl,
 		&i.Ticker,
+		&i.PreviousClosePrice,
 	)
 	return i, err
 }
 
 const deletePoistion = `-- name: DeletePoistion :one
 delete from positions where id = $1
-returning id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker
+returning id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, previous_close_price
 `
 
 func (q *Queries) DeletePoistion(ctx context.Context, id uuid.UUID) (Position, error) {
@@ -71,53 +73,60 @@ func (q *Queries) DeletePoistion(ctx context.Context, id uuid.UUID) (Position, e
 		&i.CurrentPrice,
 		&i.Ppl,
 		&i.Ticker,
+		&i.PreviousClosePrice,
 	)
 	return i, err
 }
 
-const getLastPositionsTodayByTickerExcludingCurrent = `-- name: GetLastPositionsTodayByTickerExcludingCurrent :many
-select id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker from positions where ticker = $1 and id != $2 and date(created_at) = CURRENT_DATE order by created_at desc
+const getLastPositionTodayByTicker = `-- name: GetLastPositionTodayByTicker :one
+select id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, previous_close_price from positions where ticker = $1 and date(created_at) = CURRENT_DATE order by created_at desc limit 1
 `
 
-type GetLastPositionsTodayByTickerExcludingCurrentParams struct {
+func (q *Queries) GetLastPositionTodayByTicker(ctx context.Context, ticker string) (Position, error) {
+	row := q.db.QueryRowContext(ctx, getLastPositionTodayByTicker, ticker)
+	var i Position
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Quantity,
+		&i.AveragePrice,
+		&i.CurrentPrice,
+		&i.Ppl,
+		&i.Ticker,
+		&i.PreviousClosePrice,
+	)
+	return i, err
+}
+
+const getLastPositionTodayByTickerExcludingCurrent = `-- name: GetLastPositionTodayByTickerExcludingCurrent :one
+select id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, previous_close_price from positions where ticker = $1 and id != $2 and date(created_at) = CURRENT_DATE order by created_at desc limit 1
+`
+
+type GetLastPositionTodayByTickerExcludingCurrentParams struct {
 	Ticker string
 	ID     uuid.UUID
 }
 
-func (q *Queries) GetLastPositionsTodayByTickerExcludingCurrent(ctx context.Context, arg GetLastPositionsTodayByTickerExcludingCurrentParams) ([]Position, error) {
-	rows, err := q.db.QueryContext(ctx, getLastPositionsTodayByTickerExcludingCurrent, arg.Ticker, arg.ID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Position
-	for rows.Next() {
-		var i Position
-		if err := rows.Scan(
-			&i.ID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Quantity,
-			&i.AveragePrice,
-			&i.CurrentPrice,
-			&i.Ppl,
-			&i.Ticker,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) GetLastPositionTodayByTickerExcludingCurrent(ctx context.Context, arg GetLastPositionTodayByTickerExcludingCurrentParams) (Position, error) {
+	row := q.db.QueryRowContext(ctx, getLastPositionTodayByTickerExcludingCurrent, arg.Ticker, arg.ID)
+	var i Position
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Quantity,
+		&i.AveragePrice,
+		&i.CurrentPrice,
+		&i.Ppl,
+		&i.Ticker,
+		&i.PreviousClosePrice,
+	)
+	return i, err
 }
 
 const getTodayPositions = `-- name: GetTodayPositions :many
-select id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker from positions where date(created_at) = CURRENT_DATE order by created_at desc
+select id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, previous_close_price from positions where date(created_at) = CURRENT_DATE order by created_at desc
 `
 
 func (q *Queries) GetTodayPositions(ctx context.Context) ([]Position, error) {
@@ -138,6 +147,7 @@ func (q *Queries) GetTodayPositions(ctx context.Context) ([]Position, error) {
 			&i.CurrentPrice,
 			&i.Ppl,
 			&i.Ticker,
+			&i.PreviousClosePrice,
 		); err != nil {
 			return nil, err
 		}
@@ -150,4 +160,96 @@ func (q *Queries) GetTodayPositions(ctx context.Context) ([]Position, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const getTodayPositionsTickers = `-- name: GetTodayPositionsTickers :many
+select distinct(ticker, id) from positions where date(created_at) = CURRENT_DATE
+`
+
+func (q *Queries) GetTodayPositionsTickers(ctx context.Context) ([]interface{}, error) {
+	rows, err := q.db.QueryContext(ctx, getTodayPositionsTickers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []interface{}
+	for rows.Next() {
+		var column_1 interface{}
+		if err := rows.Scan(&column_1); err != nil {
+			return nil, err
+		}
+		items = append(items, column_1)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updatePosition = `-- name: UpdatePosition :one
+update positions set quantity = $1, average_price = $2, current_price = $3, ppl = $4, ticker = $5 where id = $6
+returning id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, previous_close_price
+`
+
+type UpdatePositionParams struct {
+	Quantity     float64
+	AveragePrice float64
+	CurrentPrice float64
+	Ppl          float64
+	Ticker       string
+	ID           uuid.UUID
+}
+
+func (q *Queries) UpdatePosition(ctx context.Context, arg UpdatePositionParams) (Position, error) {
+	row := q.db.QueryRowContext(ctx, updatePosition,
+		arg.Quantity,
+		arg.AveragePrice,
+		arg.CurrentPrice,
+		arg.Ppl,
+		arg.Ticker,
+		arg.ID,
+	)
+	var i Position
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Quantity,
+		&i.AveragePrice,
+		&i.CurrentPrice,
+		&i.Ppl,
+		&i.Ticker,
+		&i.PreviousClosePrice,
+	)
+	return i, err
+}
+
+const updatePreviousClosedPrice = `-- name: UpdatePreviousClosedPrice :one
+update positions set previous_close_price = $1 where id = $2
+returning id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, previous_close_price
+`
+
+type UpdatePreviousClosedPriceParams struct {
+	PreviousClosePrice sql.NullFloat64
+	ID                 uuid.UUID
+}
+
+func (q *Queries) UpdatePreviousClosedPrice(ctx context.Context, arg UpdatePreviousClosedPriceParams) (Position, error) {
+	row := q.db.QueryRowContext(ctx, updatePreviousClosedPrice, arg.PreviousClosePrice, arg.ID)
+	var i Position
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Quantity,
+		&i.AveragePrice,
+		&i.CurrentPrice,
+		&i.Ppl,
+		&i.Ticker,
+		&i.PreviousClosePrice,
+	)
+	return i, err
 }
