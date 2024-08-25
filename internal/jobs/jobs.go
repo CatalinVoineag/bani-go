@@ -5,19 +5,17 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/CatalinVoineag/bani/internal/database"
 	"github.com/google/uuid"
-  _"github.com/lib/pq"
+	_ "github.com/lib/pq"
 )
-
-type apiConfig struct {
-  DB *database.Queries
-}
 
 type Position struct {
   Ticker string `json:"ticker"` 
@@ -56,6 +54,8 @@ func currentPositionsWorker(db *database.Queries, wg *sync.WaitGroup) {
         position.Ticker,
       )
 
+      currentPrice := positionCurrentPrice(position)
+      
       if err != nil {
         record, err := db.CreatePosition(context.Background(), database.CreatePositionParams {
           ID: uuid.New(),
@@ -63,7 +63,7 @@ func currentPositionsWorker(db *database.Queries, wg *sync.WaitGroup) {
           UpdatedAt: time.Now(),
           Quantity: position.Quantity,
           AveragePrice: position.AveragePrice,
-          CurrentPrice: position.CurrentPrice,
+          CurrentPrice: currentPrice,
           Ppl: position.Ppl,
           Ticker: position.Ticker,
         })
@@ -79,7 +79,7 @@ func currentPositionsWorker(db *database.Queries, wg *sync.WaitGroup) {
           database.UpdatePositionParams{
             Quantity: position.Quantity ,  
             AveragePrice: position.AveragePrice,
-            CurrentPrice: position.CurrentPrice,
+            CurrentPrice: currentPrice,
             Ppl: position.Ppl,
             Ticker: position.Ticker,
             ID: lastPosition.ID,
@@ -99,24 +99,46 @@ func currentPositionsWorker(db *database.Queries, wg *sync.WaitGroup) {
 }
 
 func getTradingTwoOneTwoPositions() Positions {
-  reqUrl := "https://live.trading212.com/api/v0/equity/portfolio"
-  req, err := http.NewRequest("GET", reqUrl, nil)
-  if err != nil {
-    panic(err)
-  }
-  req.Header.Add("Authorization", os.Getenv("API_KEY"))
-  res, err := http.DefaultClient.Do(req)
-  if err != nil {
-    panic(err)
-  }
-  defer res.Body.Close()
-  body, err := io.ReadAll(res.Body)
-  if err != nil {
-    panic(err)
+  var result Positions
+  keys := strings.Split(os.Getenv("API_KEYS"), ",")
+
+  for _, key := range keys {
+    reqUrl := "https://live.trading212.com/api/v0/equity/portfolio"
+    req, err := http.NewRequest("GET", reqUrl, nil)
+    if err != nil {
+      panic(err)
+    }
+    req.Header.Add("Authorization", key)
+    res, err := http.DefaultClient.Do(req)
+    if err != nil {
+      panic(err)
+    }
+    defer res.Body.Close()
+    body, err := io.ReadAll(res.Body)
+    if err != nil {
+      panic(err)
+    }
+
+    var positions Positions
+    json.Unmarshal([]byte(body), &positions)
+    result = append(result, positions...)
   }
 
-  var positions Positions
-  json.Unmarshal([]byte(body), &positions)
+  return result
+}
 
-  return positions
+func positionCurrentPrice(position Position) int64 {
+  if position.Ticker != "VUAGl_EQ" {
+    if position.CurrentPrice == math.Trunc(position.CurrentPrice) {
+      return int64(position.CurrentPrice) * 10
+    } else {
+      return int64(position.CurrentPrice*100 + 0.5)
+    }
+  } else {
+    if position.CurrentPrice == math.Trunc(position.CurrentPrice) {
+      return int64(position.CurrentPrice)
+    } else {
+      return int64(position.CurrentPrice*100 + 0.5)
+    }
+  }
 }

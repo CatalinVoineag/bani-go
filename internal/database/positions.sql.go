@@ -16,7 +16,7 @@ import (
 const createPosition = `-- name: CreatePosition :one
 insert into positions (id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker)
 values ($1, $2, $3, $4, $5, $6, $7, $8)
-returning id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, previous_close_price
+returning id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, securitytype, previous_close_price
 `
 
 type CreatePositionParams struct {
@@ -25,7 +25,7 @@ type CreatePositionParams struct {
 	UpdatedAt    time.Time
 	Quantity     float64
 	AveragePrice float64
-	CurrentPrice float64
+	CurrentPrice int64
 	Ppl          float64
 	Ticker       string
 }
@@ -51,6 +51,7 @@ func (q *Queries) CreatePosition(ctx context.Context, arg CreatePositionParams) 
 		&i.CurrentPrice,
 		&i.Ppl,
 		&i.Ticker,
+		&i.Securitytype,
 		&i.PreviousClosePrice,
 	)
 	return i, err
@@ -58,7 +59,7 @@ func (q *Queries) CreatePosition(ctx context.Context, arg CreatePositionParams) 
 
 const deletePoistion = `-- name: DeletePoistion :one
 delete from positions where id = $1
-returning id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, previous_close_price
+returning id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, securitytype, previous_close_price
 `
 
 func (q *Queries) DeletePoistion(ctx context.Context, id uuid.UUID) (Position, error) {
@@ -73,13 +74,14 @@ func (q *Queries) DeletePoistion(ctx context.Context, id uuid.UUID) (Position, e
 		&i.CurrentPrice,
 		&i.Ppl,
 		&i.Ticker,
+		&i.Securitytype,
 		&i.PreviousClosePrice,
 	)
 	return i, err
 }
 
 const getLastPositionTodayByTicker = `-- name: GetLastPositionTodayByTicker :one
-select id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, previous_close_price from positions where ticker = $1 and date(created_at) = CURRENT_DATE order by created_at desc limit 1
+select id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, securitytype, previous_close_price from positions where ticker = $1 and date(created_at) = CURRENT_DATE order by created_at desc limit 1
 `
 
 func (q *Queries) GetLastPositionTodayByTicker(ctx context.Context, ticker string) (Position, error) {
@@ -94,13 +96,14 @@ func (q *Queries) GetLastPositionTodayByTicker(ctx context.Context, ticker strin
 		&i.CurrentPrice,
 		&i.Ppl,
 		&i.Ticker,
+		&i.Securitytype,
 		&i.PreviousClosePrice,
 	)
 	return i, err
 }
 
 const getLastPositionTodayByTickerExcludingCurrent = `-- name: GetLastPositionTodayByTickerExcludingCurrent :one
-select id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, previous_close_price from positions where ticker = $1 and id != $2 and date(created_at) = CURRENT_DATE order by created_at desc limit 1
+select id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, securitytype, previous_close_price from positions where ticker = $1 and id != $2 and date(created_at) = CURRENT_DATE order by created_at desc limit 1
 `
 
 type GetLastPositionTodayByTickerExcludingCurrentParams struct {
@@ -120,13 +123,14 @@ func (q *Queries) GetLastPositionTodayByTickerExcludingCurrent(ctx context.Conte
 		&i.CurrentPrice,
 		&i.Ppl,
 		&i.Ticker,
+		&i.Securitytype,
 		&i.PreviousClosePrice,
 	)
 	return i, err
 }
 
 const getTodayPositions = `-- name: GetTodayPositions :many
-select id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, previous_close_price from positions where date(created_at) = CURRENT_DATE order by created_at desc
+select id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, securitytype, previous_close_price from positions where date(created_at) = CURRENT_DATE order by created_at desc
 `
 
 func (q *Queries) GetTodayPositions(ctx context.Context) ([]Position, error) {
@@ -147,6 +151,7 @@ func (q *Queries) GetTodayPositions(ctx context.Context) ([]Position, error) {
 			&i.CurrentPrice,
 			&i.Ppl,
 			&i.Ticker,
+			&i.Securitytype,
 			&i.PreviousClosePrice,
 		); err != nil {
 			return nil, err
@@ -191,13 +196,13 @@ func (q *Queries) GetTodayPositionsTickers(ctx context.Context) ([]interface{}, 
 
 const updatePosition = `-- name: UpdatePosition :one
 update positions set quantity = $1, average_price = $2, current_price = $3, ppl = $4, ticker = $5 where id = $6
-returning id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, previous_close_price
+returning id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, securitytype, previous_close_price
 `
 
 type UpdatePositionParams struct {
 	Quantity     float64
 	AveragePrice float64
-	CurrentPrice float64
+	CurrentPrice int64
 	Ppl          float64
 	Ticker       string
 	ID           uuid.UUID
@@ -222,6 +227,7 @@ func (q *Queries) UpdatePosition(ctx context.Context, arg UpdatePositionParams) 
 		&i.CurrentPrice,
 		&i.Ppl,
 		&i.Ticker,
+		&i.Securitytype,
 		&i.PreviousClosePrice,
 	)
 	return i, err
@@ -229,11 +235,11 @@ func (q *Queries) UpdatePosition(ctx context.Context, arg UpdatePositionParams) 
 
 const updatePreviousClosedPrice = `-- name: UpdatePreviousClosedPrice :one
 update positions set previous_close_price = $1 where id = $2
-returning id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, previous_close_price
+returning id, created_at, updated_at, quantity, average_price, current_price, ppl, ticker, securitytype, previous_close_price
 `
 
 type UpdatePreviousClosedPriceParams struct {
-	PreviousClosePrice sql.NullFloat64
+	PreviousClosePrice sql.NullInt64
 	ID                 uuid.UUID
 }
 
@@ -249,6 +255,7 @@ func (q *Queries) UpdatePreviousClosedPrice(ctx context.Context, arg UpdatePrevi
 		&i.CurrentPrice,
 		&i.Ppl,
 		&i.Ticker,
+		&i.Securitytype,
 		&i.PreviousClosePrice,
 	)
 	return i, err

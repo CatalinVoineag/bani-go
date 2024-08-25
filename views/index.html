@@ -12,6 +12,8 @@
       {{ range .Data.Positions }}
         {{ template "position" . }}
       {{ end }}
+      <br>
+      {{ template "total_daily_gain" .Data.TotalDailyGain }}
     </div>
   </body>
 </html>
@@ -19,6 +21,14 @@
 
 {{ block "position" . }}
   <div>
-    <h1>{{ .Ticker }} -- Price: {{ .CurrentPrice }} -- Previous Close Price {{ .PreviousClosePrice.Value }}</h1>
+    <h1>{{ .Ticker }} -- Price: {{ .CurrentPrice }} -- Previous Close Price {{ .PreviousClosePrice }} -- Gain {{ .DailyGain }}£ -- Percentage {{ .DailyGainPercentage }}%</h1>
+  </div>
+{{ end }}
+
+{{ block "total_daily_gain" . }}
+  <div>
+    <h1>Total Daily Gain {{ .Value }} </h1>
+    <h1>Total Daily Gain Percentage {{ .Percentage }} </h1>
+    <h1>Portfolio value {{ .PortfolioValue }} </h1>
   </div>
 {{ end }}

@@ -17,8 +17,9 @@ type Position struct {
 	UpdatedAt          time.Time
 	Quantity           float64
 	AveragePrice       float64
-	CurrentPrice       float64
+	CurrentPrice       int64
 	Ppl                float64
 	Ticker             string
-	PreviousClosePrice sql.NullFloat64
+	Securitytype       sql.NullString
+	PreviousClosePrice sql.NullInt64
 }

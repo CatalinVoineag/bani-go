@@ -10,14 +10,14 @@ import (
 	"net/http"
 
 	"strings"
-
 	"github.com/CatalinVoineag/bani/internal/database"
+	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
 )
 
 type Meta struct {
-  Symbol string `json:"symbol"`
   PreviousClose float64 `json:"previousClose"`
+  Type string `json:"InstrumentType"`
 }
 
 type Result struct {
@@ -33,7 +33,6 @@ type Response struct {
 }
 
 type PreviousClose struct {
-  Symbol string
   Close float64 
 }
 
@@ -63,7 +62,7 @@ func ScrapePreviousClosePrice(db *database.Queries) {
         ticker := tickerWithoutEQ[:len(tickerWithoutEQ) -1]
         yahooQuoteParam := ticker + "." + exchange 
 
-        closePrice := getPreviousClosePrice(yahooQuoteParam).Close
+        closePrice := getPreviousClosePrice(yahooQuoteParam)
 
         log.Printf("Yahoo close price for %s %f", yahooQuoteParam, closePrice) 
 
@@ -78,7 +77,7 @@ func ScrapePreviousClosePrice(db *database.Queries) {
   }
 }
 
-func getPreviousClosePrice(ticker string) PreviousClose {
+func getPreviousClosePrice(ticker string) int64 {
   reqUrl := "https://query1.finance.yahoo.com/v8/finance/chart/" + ticker
   req, err := http.NewRequest("GET", reqUrl, nil)
 
@@ -102,12 +101,17 @@ func getPreviousClosePrice(ticker string) PreviousClose {
   var response Response
   json.Unmarshal([]byte(body), &response)
 
-  previousClose := PreviousClose {
-    Symbol: response.Chart.Result[0].Meta.Symbol,
-    Close: response.Chart.Result[0].Meta.PreviousClose,
-  }
+  prevClose := money.NewFromFloat(
+    response.Chart.Result[0].Meta.PreviousClose,
+    money.GBP,
+  )
 
-  return previousClose
+  if response.Chart.Result[0].Meta.Type == "ETF" {
+    return int64(prevClose.Amount())
+  } else {
+    scale := 10
+    return int64(float64(scale) * prevClose.AsMajorUnits())
+  }
 }
 
 func ScrapeOpenPrices(db *database.Queries) {
@@ -115,9 +119,9 @@ func ScrapeOpenPrices(db *database.Queries) {
 
 }
 
-func float64ToNullFloat64(value float64) sql.NullFloat64 {
-	return sql.NullFloat64{
-		Float64: value,
+func float64ToNullFloat64(value int64) sql.NullInt64 {
+	return sql.NullInt64{
+		Int64: value,
 		Valid:   true,
 	}
 }

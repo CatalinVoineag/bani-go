@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/CatalinVoineag/bani/internal/database"
+	decorators "github.com/CatalinVoineag/bani/internal/decorators"
 	"github.com/CatalinVoineag/bani/internal/jobs"
+	total_daily_gain "github.com/CatalinVoineag/bani/internal/services"
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -46,7 +48,17 @@ type TradingPosition struct {
   Ppl float32 `json:"ppl"`
 }
 
-func newPosition(ticker string, quantity float64, averagePrice float64, currentPrice float64, ppl float32, previousClosePrice float64) Position {
+type Position struct {
+  Id int64
+  Ticker string
+  Quantity float64
+  AveragePrice int
+  CurrentPrice int
+  Ppl float32
+  PreviousClosePrice float64
+}
+
+func newPosition(ticker string, quantity float64, averagePrice int, currentPrice int, ppl float32, previousClosePrice float64) Position {
   return Position {
     Ticker: ticker,
     Quantity: quantity,
@@ -60,11 +72,8 @@ func newPosition(ticker string, quantity float64, averagePrice float64, currentP
 type Positions = []TradingPosition
 
 type Data struct {
-  Positions []database.Position
-}
-
-type apiConfig struct {
-  DB *database.Queries
+  Positions []decorators.DecoratedPosition
+  TotalDailyGain total_daily_gain.TotalGain 
 }
 
 func getPositions() Positions {
@@ -92,16 +101,6 @@ func getPositions() Positions {
 
 type Page struct {
   Data Data
-}
-
-type Position struct {
-  Id int64
-  Ticker string
-  Quantity float64
-  AveragePrice float64
-  CurrentPrice float64
-  Ppl float32
-  PreviousClosePrice float64
 }
 
 func main() {
@@ -133,9 +132,18 @@ func main() {
       e.Logger.Fatal("No positions")
     }
 
+    var decoratedPositions []decorators.DecoratedPosition
+    for _, position := range positions {
+      decoratedPositions = append(
+        decoratedPositions,
+        decorators.DecoratePosition(position),
+      )
+    } 
+
     page := Page {
       Data: Data { 
-        Positions: positions,
+        Positions: decoratedPositions,
+        TotalDailyGain: total_daily_gain.Call(decoratedPositions),
       },
     }
 
